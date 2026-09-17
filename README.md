@@ -127,6 +127,8 @@ The trained model file is required for classification.
 
 For large model files, use **Git LFS** or another suitable model-storage solution depending on the deployment platform.
 
+**Live Demo** : https://verdesight-ai-lhngtduszdvgzne3apjvw6.streamlit.app/
+
 ## 🔮 Future Scope
 
 * Improved real-world classification accuracy
