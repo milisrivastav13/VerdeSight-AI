@@ -1,9 +1,10 @@
+
 import os
 import json
+from pathlib import Path
 
 import numpy as np
 import tensorflow as tf
-
 from PIL import Image
 
 
@@ -11,19 +12,11 @@ from PIL import Image
 # PATH CONFIGURATION
 # ============================================================
 
-BASE_DIR = r"E:\Greensight"
+# Works both locally and on Streamlit Cloud
+BASE_DIR = Path(__file__).resolve().parent
 
-MODEL_PATH = os.path.join(
-    BASE_DIR,
-    "models",
-    "waste_classifier.keras"
-)
-
-CLASS_PATH = os.path.join(
-    BASE_DIR,
-    "models",
-    "class_names.json"
-)
+MODEL_PATH = BASE_DIR / "models" / "waste_classifier.keras"
+CLASS_PATH = BASE_DIR / "models" / "class_names.json"
 
 IMG_SIZE = (224, 224)
 
@@ -33,30 +26,15 @@ IMG_SIZE = (224, 224)
 # ============================================================
 
 DISPLAY_NAMES = {
-
-    "organic":
-        "Organic / Biodegradable",
-
-    "plastic":
-        "Plastic",
-
-    "paper":
-        "Paper / Cardboard",
-
-    "metal":
-        "Metal",
-
-    "glass":
-        "Glass",
-
-    "e_waste":
-        "E-Waste",
-
-    "textile":
-        "Textile",
-
-    "general":
-        "General Waste",
+    "organic": "Organic / Biodegradable",
+    "plastic": "Plastic",
+    "paper": "Paper / Cardboard",
+    "metal": "Metal",
+    "glass": "Glass",
+    "e_waste": "E-Waste",
+    "textile": "Textile",
+    "general": "General Waste",
+    "cardboard": "Cardboard",
 }
 
 
@@ -69,65 +47,55 @@ _class_names = None
 
 
 def load_model():
-
     global _model
     global _class_names
 
     # --------------------------------------------------------
     # Already loaded
     # --------------------------------------------------------
-
-    if (
-        _model is not None
-        and _class_names is not None
-    ):
-
+    if _model is not None and _class_names is not None:
         return _model, _class_names
 
     # --------------------------------------------------------
-    # Check files
+    # Check model file
     # --------------------------------------------------------
-
-    if not os.path.exists(MODEL_PATH):
-
+    if not MODEL_PATH.exists():
         raise FileNotFoundError(
             "\n\nTrained model not found.\n\n"
-            f"Expected location:\n"
-            f"{MODEL_PATH}\n\n"
-            "First run:\n"
-            "python train_model.py"
+            f"Expected location:\n{MODEL_PATH}\n\n"
+            "Make sure models/waste_classifier.keras exists "
+            "in the project repository."
         )
 
-    if not os.path.exists(CLASS_PATH):
-
+    # --------------------------------------------------------
+    # Check class mapping
+    # --------------------------------------------------------
+    if not CLASS_PATH.exists():
         raise FileNotFoundError(
             "\n\nClass mapping not found.\n\n"
-            f"Expected location:\n"
-            f"{CLASS_PATH}\n\n"
-            "First run:\n"
-            "python train_model.py"
+            f"Expected location:\n{CLASS_PATH}\n\n"
+            "Make sure models/class_names.json exists "
+            "in the project repository."
         )
 
     # --------------------------------------------------------
-    # Load
+    # Load trained model
     # --------------------------------------------------------
-
     _model = tf.keras.models.load_model(
         MODEL_PATH
     )
 
+    # --------------------------------------------------------
+    # Load class names
+    # --------------------------------------------------------
     with open(
         CLASS_PATH,
         "r",
         encoding="utf-8"
     ) as file:
-
         _class_names = json.load(file)
 
-    return (
-        _model,
-        _class_names
-    )
+    return _model, _class_names
 
 
 # ============================================================
@@ -136,23 +104,16 @@ def load_model():
 
 def preprocess_image(image):
 
-    if not isinstance(
-        image,
-        Image.Image
-    ):
+    if not isinstance(image, Image.Image):
+        image = Image.open(image)
 
-        image = Image.open(
-            image
-        )
+    # Convert to RGB
+    image = image.convert("RGB")
 
-    image = image.convert(
-        "RGB"
-    )
+    # Resize to MobileNetV2 input size
+    image = image.resize(IMG_SIZE)
 
-    image = image.resize(
-        IMG_SIZE
-    )
-
+    # Convert image to NumPy array
     image_array = np.asarray(
         image,
         dtype=np.float32
@@ -160,13 +121,12 @@ def preprocess_image(image):
 
     # MobileNetV2 preprocessing
     image_array = (
-        tf.keras.applications
-        .mobilenet_v2
-        .preprocess_input(
+        tf.keras.applications.mobilenet_v2.preprocess_input(
             image_array
         )
     )
 
+    # Add batch dimension
     image_array = np.expand_dims(
         image_array,
         axis=0
@@ -183,12 +143,11 @@ def process_and_predict(image):
 
     model, class_names = load_model()
 
-    processed_image = (
-        preprocess_image(
-            image
-        )
-    )
+    processed_image = preprocess_image(image)
 
+    # --------------------------------------------------------
+    # Model prediction
+    # --------------------------------------------------------
     probabilities = model.predict(
         processed_image,
         verbose=0
@@ -197,7 +156,6 @@ def process_and_predict(image):
     # --------------------------------------------------------
     # Top predictions
     # --------------------------------------------------------
-
     sorted_indices = np.argsort(
         probabilities
     )[::-1]
@@ -206,71 +164,48 @@ def process_and_predict(image):
 
     for index in sorted_indices[:3]:
 
-        raw_category = (
-            class_names[index]
-        )
+        raw_category = class_names[index]
 
         confidence = (
-            float(
-                probabilities[index]
-            ) * 100
+            float(probabilities[index]) * 100
         )
 
-        display_category = (
-            DISPLAY_NAMES.get(
-                raw_category,
-                raw_category
-                .replace("_", " ")
-                .title()
-            )
+        display_category = DISPLAY_NAMES.get(
+            raw_category,
+            raw_category.replace("_", " ").title()
         )
 
         top_predictions.append({
-
-            "category":
-                display_category,
-
-            "raw_category":
-                raw_category,
-
-            "confidence":
-                round(
-                    confidence,
-                    2
-                )
+            "category": display_category,
+            "raw_category": raw_category,
+            "confidence": round(
+                confidence,
+                2
+            )
         })
 
     # --------------------------------------------------------
     # Best prediction
     # --------------------------------------------------------
-
     best = top_predictions[0]
 
     # --------------------------------------------------------
     # Uncertainty protection
     # --------------------------------------------------------
-
     if best["confidence"] < 45:
 
-        category = (
-            "Uncertain / Needs Review"
-        )
+        category = "Uncertain / Needs Review"
 
     else:
 
         category = best["category"]
 
+    # --------------------------------------------------------
+    # Final result
+    # --------------------------------------------------------
     return {
-
-        "category":
-            category,
-
-        "raw_category":
-            best["raw_category"],
-
-        "confidence":
-            best["confidence"],
-
-        "top_predictions":
-            top_predictions,
+        "category": category,
+        "raw_category": best["raw_category"],
+        "confidence": best["confidence"],
+        "top_predictions": top_predictions,
     }
