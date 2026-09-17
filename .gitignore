@@ -1,0 +1,9 @@
+@"
+dataset/
+download/
+downloaded_dataset/
+__pycache__/
+*.pyc
+waste_classifier_92_25_backup.keras
+quick_finetune.py
+"@ | Set-Content .gitignore
